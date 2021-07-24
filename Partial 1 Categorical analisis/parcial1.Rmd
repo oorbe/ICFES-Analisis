@@ -1,0 +1,843 @@
+---
+title: "Untitled"
+author: "Oliver Rodriguez"
+date: "23/4/2021"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+library(tidyverse)
+library(xtable)
+setwd('C:/Users/Oliver/Documents/9/IA dato categoricos ') 
+load(file = "baseICFEStrabajo.Rdata") # cargo datos formato R
+datos$resultado <- cut(datos$ESTU_PUESTO,breaks=(0:10)*100)
+```
+
+```{r}
+summary(datos$COLE_INST_VLR_PENSION)
+table(datos$COLE_INST_VLR_PENSION)
+```
+
+probando otro indice:
+```{r}
+# datos_prueba <- datos[,42:58]
+# datos_prueba2 <- na.omit(datos_prueba)
+# summary(datos_prueba)
+# apply(datos_prueba, 2, table)
+#x=datos
+f_prueba <- function(x){
+  datos2 <-x[,42:58]
+  indice0 <- apply(datos2, 1, sum) # aplico suma por filas
+  indice00 <- indice0[-which(is.na(indice0))] # para evita confusiones con NA´s
+  indice <- indice0*100/max(indice00) # multiplico el indice por 100 y los divido por el maximo de los indice -> queda en terminos   
+  x$indice2 <- indice # lao añado al df ingresado
+  return(x) # retorno el df de ingreso y lo retorno con el índice
+}
+
+datos <- f_prueba(datos)
+```
+
+```{r}
+# esta funcion extrae el indice, tomando las columans que me interesan leug.
+f1 <- function(x){# dentr el df
+  
+  datos2 <- (subset(x, select = c('ESTU_ESTRATO','FAMI_NIVEL_SISBEN','ECON_MATERIAL_PISOS',
+                               'FAMI_ING_FMILIAR_MENSUAL','ECON_SN_SERVICIO_TV','ECON_SN_NEVERA'
+                               ,'ECON_SN_LAVADORA','ECON_SN_CELULAR', 'ECON_SN_INTERNET','ECON_SN_AUTOMOVIL')))
+  datos2[is.na(datos2)] <- 0 # todos los NA´s a 0
+      #' Se cambiaran los numeros como se especifican anteriormente:
+  datos2$ECON_SN_SERVICIO_TV <- ifelse(datos2$ECON_SN_SERVICIO_TV == 1, 2, 0)
+  datos2$ECON_SN_CELULAR <- ifelse(datos2$ECON_SN_CELULAR == 1, 2, 0)
+  datos2$ECON_SN_LAVADORA <- ifelse(datos2$ECON_SN_LAVADORA == 1, 5, 0)
+  datos2$ECON_SN_INTERNET <- ifelse(datos2$ECON_SN_INTERNET == 1, 6, 0)
+  datos2$ECON_SN_AUTOMOVIL <- ifelse(datos2$ECON_SN_AUTOMOVIL == 1, 8, 0)
+  indice0 <- apply(datos2, 1, sum) # aplico suma por filas
+  indice <- indice0*100/max(indice0) # multiplico el indice por 100 y los divido por el maximo de los indice -> queda en terminos                                         porcentules
+  
+  x$indice <- indice # lao añado al df ingresado
+  return(x) # retorno el df de ingreso y lo retorno con el índice
+}
+
+datos <- f1(datos)
+```
+
+```{r}
+# Así clasifico a los colegios: los agrupo por colegio, luego sumo el indice de riqueza de los estudiantes anteriormente creado:
+datos_agrupados <- datos %>% 
+  group_by(COLE_INST_NOMBRE) %>% 
+  summarise(suma_ind_colegio=sum(indice))
+
+
+# modifico datos realizando un full_join  con los datos_agrupados para  la BD en las condiciones iniciales pero con la nueva variable:  
+datos <- datos %>% 
+  full_join(datos_agrupados, by =c('COLE_INST_NOMBRE'='COLE_INST_NOMBRE'))
+
+# el nuevo indice que indica lo costoso que puede ser el colegio
+datos$suma_ind_colegio <- datos$suma_ind_colegio*100/max(datos$suma_ind_colegio)
+#datos$suma_ind_colegio2 <- #datos$suma_ind_colegio2*100/max(datos$suma_ind_colegio2[-which(is.na(datos$suma_ind_colegio2))])
+
+datos <- datos %>% relocate(COLE_INST_NOMBRE,suma_ind_colegio,resultado,suma_ind_colegio) # reubico las columans de interes
+
+
+#  se crean los percentiles para ind_colegio.
+datos<- datos %>%
+  mutate(ind_colegio= case_when(
+     datos$suma_ind_colegio <=10 ~ 10
+    ,datos$suma_ind_colegio >10 & datos$suma_ind_colegio <=20 ~ 20
+    ,datos$suma_ind_colegio >20 & datos$suma_ind_colegio <=30 ~ 30
+    ,datos$suma_ind_colegio >30 & datos$suma_ind_colegio <=40 ~ 40
+    ,datos$suma_ind_colegio >40 & datos$suma_ind_colegio <=50 ~ 50
+    ,datos$suma_ind_colegio >50 & datos$suma_ind_colegio <=60 ~ 60
+    ,datos$suma_ind_colegio >60 & datos$suma_ind_colegio <=70 ~ 70
+    ,datos$suma_ind_colegio >70 & datos$suma_ind_colegio <=80 ~ 80
+    ,datos$suma_ind_colegio >80 & datos$suma_ind_colegio <=90 ~ 90
+    ,datos$suma_ind_colegio >90 ~ 100
+  ))
+
+# los bloques de codigo comentados eran para probar el segundo indice.
+ # datos<- datos %>%
+ #   mutate(ind_colegio2= case_when(
+ #      datos$suma_ind_colegio2 <=10 ~ 10
+ #     ,datos$suma_ind_colegio2 >10 & datos$suma_ind_colegio2 <=20 ~ 20
+ #     ,datos$suma_ind_colegio2 >20 & datos$suma_ind_colegio2 <=30 ~ 30
+ #     ,datos$suma_ind_colegio2 >30 & datos$suma_ind_colegio2 <=40 ~ 40
+ #     ,datos$suma_ind_colegio2 >40 & datos$suma_ind_colegio2 <=50 ~ 50
+ #     ,datos$suma_ind_colegio2 >50 & datos$suma_ind_colegio2 <=60 ~ 60
+ #     ,datos$suma_ind_colegio2 >60 & datos$suma_ind_colegio2 <=70 ~ 70
+ #     ,datos$suma_ind_colegio2 >70 & datos$suma_ind_colegio2 <=80 ~ 80
+ #     ,datos$suma_ind_colegio2 >80 & datos$suma_ind_colegio2 <=90 ~ 90
+ #     ,datos$suma_ind_colegio2 >90 ~ 100
+ #   ))
+# ## una forma de realizarlo.
+# indice2 <- cut(datos$suma_ind_colegio2, (seq(0,100,by=10)))
+# datos$indice2 <- indice2
+# reubico las columnas de interes para visualizar 
+datos <- datos %>% relocate(COLE_INST_NOMBRE,ind_colegio,suma_ind_colegio,indice,resultado) # reubico las columans de interes
+
+datos %>% filter(COLE_INST_NOMBRE == 'COL CORAZONISTA')
+```
+
+```{r}
+#  Estos son lo municipios del valle del aburra
+#  Caldas, La Estrella, Sabaneta, Envigado, Itagüí en el sur, Medellín en el centro del valle, Bello, Copacabana, Girardota y Barbosa en el norte.
+municipios_valle_aburra <- c('CALDAS', 'LA ESTRELLA', 'SABANETA', 'ENVIGADO', 'ITAGUI', 'MEDELLIN','BELLO', 'COPACABANA', 'GIRARDOTA' , 'BARBOSA' )
+
+# Tomare las columnas necesarias para el parcial 
+datos2 <- datos %>%  filter(ESTU_RESIDE_DEPT == 'ANTIOQUIA' & ESTU_RESIDE_MCPIO %in% municipios_valle_aburra)     %>%select(COLE_INST_NOMBRE, ind_colegio, resultado,
+         ESTU_RESIDE_MCPIO,COLE_NATURALEZA, COLE_CARACTER_COLEGIO, COLE_INST_VLR_PENSION,
+          COLE_INST_JORNADA) #count(ESTU_RESIDE_MCPIO)
+
+
+
+# al parecer si tiene cierto sentido que la cantidad de riqueza del colegio influye en mejore resultados, pero no me conformo uno desea ver un crecimiento pero siempre en el estrato mayor hay una caida.
+
+# Aunque se arealiza otro indice considerando todas las variables numericas (el anterior solo con 10) se obtienen resultados muy similares, exepto el el estrato de riqueza 60 que es mejor en el segundo caso. Por lo tanto solo trabajaré con lo que ya habia diseñado.
+prop.table(table( datos2$resultado, datos2$ind_colegio),1)
+#prop.table(table(datos2$ind_colegio2, datos2$resultado),1)
+# revisa idea de cambiar ceros por un 0.5
+t1 <- ifelse(table(datos2$ind_colegio, datos2$resultado) == 0 , 0.5, table(datos2$ind_colegio, datos2$resultado)) # pensandolo bien, no sería valido pues sería muestrear colegios que no existen poniendoles 0.5 cuando estoy representando es el numero de estudiantes en cada variable de la tabla.
+
+prop.table(t1,1)
+```
+
+
+```{r}
+# estos son los datos con lo que voy a trabajar
+datos2 <- datos2 %>% select(COLE_INST_NOMBRE, ind_colegio, resultado,
+         ESTU_RESIDE_MCPIO,COLE_NATURALEZA, 
+          COLE_INST_JORNADA)
+datos2
+
+#puedo realizar un analisis descriptivo de estos datos:
+
+# para los municipios seleccionados no hay colegios con categoria de riqueza de 50 o de 90.
+
+# se realizan las tablas y sus graficos de barras:
+xtable(round(prop.table(table(datos2$resultado, datos2$COLE_INST_JORNADA), 2),3 ))
+d <- datos2 %>% group_by(COLE_INST_JORNADA) %>% count() %>% arrange(desc(n))
+d['prop'] <- round(d$n/sum(d$n),3)
+ggplot(data =d, aes(x=COLE_INST_JORNADA, y=n) )+
+  geom_bar(stat = 'identity', color='blue')+
+  theme_minimal()+
+  geom_text(aes(label=n), vjust=1.6, color="white", size=3.5)+
+  geom_text(aes(label=prop), vjust=-0.30, color="black", size=3.5)+
+  labs(title = 'Cantida de estudiantes por Jornada en el Valle de Aburra', y='', x='Jornada')
+
+
+
+xtable(round(prop.table(table(datos2$resultado, datos2$COLE_NATURALEZA), 2),3 ))
+
+d <- datos2 %>% group_by(COLE_NATURALEZA) %>% count() %>% arrange(desc(n))
+d['prop'] <- round(d$n/sum(d$n),3)
+ggplot(data =d, aes(x=COLE_NATURALEZA, y=n) )+
+  geom_bar(stat = 'identity', color='blue')+
+  theme_minimal()+
+  geom_text(aes(label=n), vjust=1.6, color="white", size=3.5)+
+  geom_text(aes(label=prop), vjust=-0.30, color="black", size=3.5)+
+  labs(title = 'Cantida de estudiantes en instituciones \n oficales(O) y privadas(N) en el Valle de Aburra', y='', x='Tipo')
+
+
+
+xtable(round(prop.table(table(datos2$resultado, datos2$ind_colegio), 2), 3))
+d <- datos2 %>% group_by(ind_colegio) %>% count() %>% arrange(desc(n))
+d['prop'] <- round(d$n/sum(d$n),3)
+ggplot(data =d, aes(x=ind_colegio, y=n) )+
+  geom_bar(stat = 'identity', color='blue')+
+  theme_minimal()+
+  geom_text(aes(label=n), vjust=1., color="white", size=3.5)+
+  geom_text(aes(label=prop), vjust=-0.30, color="black", size=3.5)+
+  labs(title = 'Cantida de estudiantes en  instituciones por su indice economico \n en el Valle de Aburra', y='', x='Indice')
+
+# table(datos2$ESTU_RESIDE_MCPIO, datos2$resultado) # there wa a problwm with levesl so ill drop it
+datos2$ESTU_RESIDE_MCPIO <- droplevels(datos2$ESTU_RESIDE_MCPIO)
+xtable(round(prop.table(table(datos2$ESTU_RESIDE_MCPIO, datos2$resultado), 1), 3))
+d <- datos2 %>% group_by(ESTU_RESIDE_MCPIO) %>% count() %>% arrange(desc(n))
+d['prop'] <- round(d$n/sum(d$n),3)
+ggplot(data =d, aes(x=ESTU_RESIDE_MCPIO, y=n) )+
+  geom_bar(stat = 'identity', color='blue')+
+  theme_minimal()+
+  geom_text(aes(label=n), vjust=1., color="white", size=3.5)+
+  geom_text(aes(label=prop), vjust=-0.30, color="black", size=3.5)+
+  labs(title = 'Cantida de estudiantes por ciudad \n en el Valle de Aburra', y='', x='Ciudad de residencia')+
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+```
+
+Realice un an ́a-
+lisis comparativo del Resultado entre los colegios privados y los
+colegios p ́ublicos de los municipios del Valle de Aburr ́a, pero
+comparando instituciones del mismo nivel de riqueza (el que
+ud. defini ́o) y de la misma jornada.
+```{r}
+# aui segmento los datos en cada una de sus jornadas para poder compararlas.
+unique(datos2$COLE_INST_JORNADA)
+jornada_tarde <- datos2 %>%  filter(COLE_INST_JORNADA == 'TARDE')
+jornada_mañana <- datos2 %>%  filter(COLE_INST_JORNADA == 'MAÃ‘ANA')
+jornada_completa <- datos2 %>%  filter(COLE_INST_JORNADA == 'COMPLETA U ORDINARIA')
+jornada_sabatina <- datos2 %>%  filter(COLE_INST_JORNADA == 'SABATINA - DOMINICAL')
+jornada_noche <- datos2 %>%  filter(COLE_INST_JORNADA == 'NOCHE')
+```
+# Empiezo a separa por jornadas:
+ 
+# Jornadas en general:
+```{r}
+# con esta funcion puedo observar si se pueden hacer comparaciones entre las variables.
+ftable(jornada_tarde$COLE_NATURALEZA, jornada_tarde$resultado, jornada_tarde$ind_colegio)
+ftable(jornada_mañana$COLE_NATURALEZA, jornada_mañana$resultado, jornada_mañana$ind_colegio)
+ftable(jornada_completa$COLE_NATURALEZA, jornada_completa$resultado, jornada_completa$ind_colegio)
+ftable(jornada_sabatina$COLE_NATURALEZA, jornada_sabatina$resultado, jornada_sabatina$ind_colegio)
+ftable(jornada_noche$COLE_NATURALEZA, jornada_noche$resultado, jornada_noche$ind_colegio)
+
+
+```
+Prueba de homogeneidad GSK:
+```{r}
+GSK.homogenidad<-function(N,Nro.Estratos){
+  # Funciones auxiliares###########################
+  # Funci ́on que crea una matriz en bloque a partir de dos matrices
+  crea.bloque<-function(mat1,mat2){
+    nf1<-nrow(mat1);nc1<-ncol(mat1)
+    nf2<-nrow(mat2);nc2<-ncol(mat2)
+    mat1<-cbind(mat1,matrix(0,nrow=nf1,ncol=nc2))
+    mat2<-cbind(matrix(0,nrow=nf2,ncol=nc1),mat2)
+    matdef<-rbind(mat1,mat2)
+    return(matdef)
+  }
+  # Funci ́on que genera la A apropiada
+  construye.A.Homogenidad<-function(k,r){
+    r1<- r-1
+    unos<-diag(1,r1)
+    A1<-cbind(unos,0)
+    B<--A1
+    B<-kronecker(diag(1,k-1),B)
+    dim(B)
+    A1<-kronecker(matrix(rep(1,k-1),ncol=1),A1)
+    res<-cbind(A1,B)
+    return(res)
+  }
+  # Funci ́on que corrige los ceros convirti ́endolos en 0.5
+  ceros.a.5<-function(Tabla){
+    Nro.col<-ncol(Tabla)
+    if(any(Tabla==0))Tabla<-matrix(ifelse(as.vector(Tabla)==0,0.5,Tabla),ncol=Nro.col)
+    return(Tabla)
+  }
+  N<-matrix(t(N),ncol=1,byrow=F)
+  N<-ceros.a.5(N)
+  Nro.respuestas<-length(N)/Nro.Estratos
+  A<-construye.A.Homogenidad(Nro.Estratos,Nro.respuestas)
+  
+  donde.voy<-0
+  for(i in 1:Nro.Estratos){
+    print('================================================')
+    identifica<-c('Estrato ',i)
+    print(identifica)
+    
+    temp<-N[(donde.voy+1):(donde.voy+Nro.respuestas)]
+    print('Frecuencias de la subpoblaci ́on')
+    print(temp)
+    donde.voy<-donde.voy+Nro.respuestas
+    n.temp<-sum(temp)
+    probab<-matrix(temp/n.temp,ncol=1)
+    temp<- probab%*%t(probab)
+    temp2<-diag(as.vector(probab))
+    varcov.p<-(temp2-temp)/n.temp
+    print('p estimado del estrato')
+    print(t(probab))
+    print('Matriz de varianzas y covarianzas estimada del estrato')
+    print(varcov.p)
+    if(i==1){
+      varcov.grande<-varcov.p
+      prob.grande<-probab
+    }
+    else{
+      varcov.grande<-crea.bloque(varcov.grande,varcov.p)
+      prob.grande<-rbind(prob.grande,probab)
+    }
+  }
+  print('================================================')
+  f=A%*%matrix(prob.grande,ncol=1)
+  varcov.f<-A%*%varcov.grande%*%t(A)
+  print('f estimado ')
+  print(f)
+  print('Matriz de varianzas y covarianzas de f')
+  print(varcov.f)
+  chi=t(f)%*%solve(temp<-varcov.f)%*%f
+  gl=nrow(temp)
+  
+  valor.p=pchisq(chi,gl,lower.tail=F)
+  print('Prueba de igualdad de las f')
+  print(c('Chicuadrada calculada: ',chi))
+  print(c('Grados de libertad:',gl))
+  print(c('Valor-p: ',valor.p))
+} # FIN funci ́on GSK ***************************************************
+```
+
+
+#tarde
+```{r}
+ftable(jornada_tarde$COLE_NATURALEZA, jornada_tarde$resultado, jornada_tarde$ind_colegio)
+# se observa que solo los indices de riqueza 10, 20, 30 se pueden comparar.
+tarde_riqueza10 <- jornada_tarde %>% filter(ind_colegio==10)
+summary(tarde_riqueza10)
+tarde_riqueza20 <- jornada_tarde %>% filter(ind_colegio==20)
+summary(tarde_riqueza20)
+tarde_riqueza30 <- jornada_tarde %>% filter(ind_colegio==30)
+summary(tarde_riqueza30)
+
+
+# graficamos el barchar que nos permita ver la cantidad de estudiantes por naturales, índice  y jornada de la tarde.
+
+# Es un query simple:
+d <- datos2 %>%  filter(ind_colegio %in% c(10,20,30),COLE_INST_JORNADA == 'TARDE') %>%  group_by(COLE_NATURALEZA,ind_colegio) %>% count() %>% arrange(desc(n)) 
+# Hallo la prorpoción en relación al tota:
+d['prop'] <- round(d$n/sum(d$n),3)  
+# el indice es numerico lo convierto a caracter:
+d$ind_colegio <- as.character(d$ind_colegio) 
+
+#finalmente grafico:
+ggplot(data =d, aes(x=COLE_NATURALEZA, y=n, fill=ind_colegio) )+
+  geom_bar(stat = 'identity', position = 'dodge')+ # dodge hace las tres barras basados en el anterior fill
+  theme_minimal()+
+  geom_text(aes(label=n), vjust=1, color="white", size=3.5, position = position_dodge(width = 1))+ # dodge par ubicar texto.
+  geom_text(aes(label=prop), vjust=-0.30, color="black", size=3.5, position = position_dodge(width = 1))+
+  labs(title = 'Cantida de estudiantes en instituciones \n oficales(O) y privadas(N) segun  indice en el Valle de Aburra', y='', x='Tipo')
+# se hara el mismo procedimiento anterior para cada jornada.
+
+
+
+#---------------------------------P H --------------------------------------------------------------
+# realizo la tabla de porporciones debidamente ie. estratos por filas, dos estratos en total
+t1 <- table(tarde_riqueza10$COLE_NATURALEZA,tarde_riqueza10$resultado)
+# GSK recibe las tablas con sus frecuencias observadas.
+GSK.homogenidad(t1,2);
+
+#---------------------------------graficos de lineas---------------------------------------------
+
+# TOmo las prorpociónes de manera conveniente, por columna
+t <- round(prop.table(table(tarde_riqueza10$resultado, tarde_riqueza10$COLE_NATURALEZA),2) ,3);t
+# creo un data frame de manera estrategica para que pueda funcionar mi grafico con ggplot2
+df <- data.frame(naturaleza=c(rep('N',nrow(t)),rep('O',nrow(t))), 
+                 proporcion=c(t[,1],t[,2]), 
+                 puesto=c(rownames(t),rownames(t))) ; df
+
+#finalmente grafico
+ggplot(data=df, aes(x=puesto, y=proporcion, group=naturaleza, color=naturaleza)) +
+  geom_line() + geom_point()+
+  scale_color_brewer(palette="Dark2")+
+  theme_minimal()+
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))+ # ajusta etiquetas  del eje x
+  labs(title = 'Proporción de estudiantes por puesto segun la naturaleza \n del colegio en el indice económico 10')
+
+# se hace lo mismo para las demás comparaciones:
+
+
+#---------------------------------P H --------------------------------------------------------------
+
+
+round(prop.table(table(tarde_riqueza20$COLE_NATURALEZA,tarde_riqueza20$resultado),1),3)
+GSK.homogenidad(table(tarde_riqueza20$COLE_NATURALEZA,tarde_riqueza20$resultado),2);
+
+#---------------------------------graficos de lineas---------------------------------------------
+
+t <- round(prop.table(table(tarde_riqueza20$resultado, tarde_riqueza20$COLE_NATURALEZA),2) ,3);t
+df <- data.frame(naturaleza=c(rep('N',nrow(t)),rep('O',nrow(t))), 
+                 proporcion=c(t[,1],t[,2]), 
+                 puesto=c(rownames(t),rownames(t))) ; df
+
+ggplot(data=df, aes(x=puesto, y=proporcion, group=naturaleza, color=naturaleza)) +
+  geom_line() + geom_point()+
+  scale_color_brewer(palette="Dark2")+
+  theme_minimal()+
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))+
+  labs(title = 'Proporción de estudiantes por puesto segun la naturaleza \n del colegio en el indice económico 20')
+
+#---------------------------------P H --------------------------------------------------------------
+
+round(prop.table(table(tarde_riqueza30$COLE_NATURALEZA,tarde_riqueza30$resultado),1),3)
+GSK.homogenidad(table(tarde_riqueza30$COLE_NATURALEZA,tarde_riqueza30$resultado),2)
+
+#---------------------------------graficos de lineas---------------------------------------------
+
+t <- round(prop.table(table(tarde_riqueza30$resultado, tarde_riqueza30$COLE_NATURALEZA),2) ,3);t
+df <- data.frame(naturaleza=c(rep('N',nrow(t)),rep('O',nrow(t))), 
+                 proporcion=c(t[,1],t[,2]), 
+                 puesto=c(rownames(t),rownames(t))) ; df
+
+ggplot(data=df, aes(x=puesto, y=proporcion, group=naturaleza, color=naturaleza)) +
+  geom_line() + geom_point()+
+  scale_color_brewer(palette="Dark2")+
+  theme_minimal()+
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))+
+  labs(title = 'Proporción de estudiantes por puesto segun la naturaleza \n del colegio en el indice económico 30')
+
+
+
+
+```
+# mañana
+```{r}
+ftable(jornada_mañana$COLE_NATURALEZA, jornada_mañana$resultado, jornada_mañana$ind_colegio)
+
+
+d <- datos2 %>%  filter(ind_colegio %in% c(10,20,30,40,70),COLE_INST_JORNADA == 'MAÃ‘ANA') %>% group_by(COLE_NATURALEZA,ind_colegio) %>% count() %>% arrange(desc(n))
+d['prop'] <- round(d$n/sum(d$n),3)
+d$ind_colegio <- as.character(d$ind_colegio)
+
+ggplot(data =d, aes(x=COLE_NATURALEZA, y=n, fill=ind_colegio) )+
+  geom_bar(stat = 'identity', position = 'dodge')+
+  theme_minimal()+
+  geom_text(aes(label=n), vjust=1.6, color="white", size=3.5, position = position_dodge(width = 1))+
+  geom_text(aes(label=prop), vjust=-0.30, color="black", size=3.5, position = position_dodge(width = 1))+
+  labs(title = 'Cantida de estudiantes en instituciones \n oficales(O) y privadas(N) segun  indice en el Valle de Aburra', y='', x='Tipo')
+
+
+
+
+mañana_riqueza10 <- jornada_mañana %>% filter(ind_colegio==10)
+round(prop.table(table(mañana_riqueza10$COLE_NATURALEZA,mañana_riqueza10$resultado),1),3)
+GSK.homogenidad(table(mañana_riqueza10$COLE_NATURALEZA, mañana_riqueza10$resultado),2)
+
+#---------------------------------grafico de lineas---------------------------------------------
+t <- round(prop.table(table(mañana_riqueza10$resultado, mañana_riqueza10$COLE_NATURALEZA),2) ,3);t
+df <- data.frame(naturaleza=c(rep('N',nrow(t)),rep('O',nrow(t))), 
+                 proporcion=c(t[,1],t[,2]), 
+                 puesto=c(rownames(t),rownames(t))) ; df
+
+ggplot(data=df, aes(x=puesto, y=proporcion, group=naturaleza, color=naturaleza)) +
+  geom_line() + geom_point()+
+  scale_color_brewer(palette="Dark2")+
+  theme_minimal()+
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))+
+  labs(title = 'Proporción de estudiantes por puesto segun la naturaleza \n del colegio en el indice económico 10')
+
+
+mañana_riqueza20 <- jornada_mañana %>% filter(ind_colegio==20)
+round(prop.table(table(mañana_riqueza20$COLE_NATURALEZA,mañana_riqueza20$resultado),1),3)
+GSK.homogenidad(table(mañana_riqueza20$COLE_NATURALEZA,mañana_riqueza20$resultado),2)
+
+#---------------------------------grafico de lineas---------------------------------------------
+t <- round(prop.table(table(mañana_riqueza20$resultado, mañana_riqueza20$COLE_NATURALEZA),2) ,3);t
+df <- data.frame(naturaleza=c(rep('N',nrow(t)),rep('O',nrow(t))), 
+                 proporcion=c(t[,1],t[,2]), 
+                 puesto=c(rownames(t),rownames(t))) ; df
+
+ggplot(data=df, aes(x=puesto, y=proporcion, group=naturaleza, color=naturaleza)) +
+  geom_line() + geom_point()+
+  scale_color_brewer(palette="Dark2")+
+  theme_minimal()+
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))+
+  labs(title = 'Proporción de estudiantes por puesto segun la naturaleza \n del colegio en el indice económico 20')
+
+mañana_riqueza30 <- jornada_mañana %>% filter(ind_colegio==30)
+round(prop.table(table(mañana_riqueza30$COLE_NATURALEZA,mañana_riqueza30$resultado),1), 3)
+GSK.homogenidad(table(mañana_riqueza30$COLE_NATURALEZA,mañana_riqueza30$resultado), 2)
+
+#---------------------------------grafico de lineas---------------------------------------------
+t <- round(prop.table(table(mañana_riqueza30$resultado, mañana_riqueza30$COLE_NATURALEZA),2) ,3);t
+df <- data.frame(naturaleza=c(rep('N',nrow(t)),rep('O',nrow(t))), 
+                 proporcion=c(t[,1],t[,2]), 
+                 puesto=c(rownames(t),rownames(t))) ; df
+
+ggplot(data=df, aes(x=puesto, y=proporcion, group=naturaleza, color=naturaleza)) +
+  geom_line() + geom_point()+
+  scale_color_brewer(palette="Dark2")+
+  theme_minimal()+
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))+
+  labs(title = 'Proporción de estudiantes por puesto segun la naturaleza \n del colegio en el indice económico 30')
+
+mañana_riqueza40 <- jornada_mañana %>% filter(ind_colegio==40)
+round(prop.table(table(mañana_riqueza40$COLE_NATURALEZA,mañana_riqueza40$resultado),1),3)
+GSK.homogenidad(table(mañana_riqueza40$COLE_NATURALEZA,mañana_riqueza40$resultado),2)
+
+#---------------------------------grafico de lineas---------------------------------------------
+t <- round(prop.table(table(mañana_riqueza40$resultado, mañana_riqueza40$COLE_NATURALEZA),2) ,3);t
+df <- data.frame(naturaleza=c(rep('N',nrow(t)),rep('O',nrow(t))), 
+                 proporcion=c(t[,1],t[,2]), 
+                 puesto=c(rownames(t),rownames(t))) ; df
+
+ggplot(data=df, aes(x=puesto, y=proporcion, group=naturaleza, color=naturaleza)) +
+  geom_line() + geom_point()+
+  scale_color_brewer(palette="Dark2")+
+  theme_minimal()+
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))+
+  labs(title = 'Proporción de estudiantes por puesto segun la naturaleza \n del colegio en el indice económico 40')
+
+mañana_riqueza70 <- jornada_mañana %>% filter(ind_colegio==70)
+round(prop.table(table(mañana_riqueza70$COLE_NATURALEZA,mañana_riqueza70$resultado),1),3)
+GSK.homogenidad(table(mañana_riqueza70$COLE_NATURALEZA,mañana_riqueza70$resultado),2)
+
+#---------------------------------grafico de lineas---------------------------------------------
+t <- round(prop.table(table(mañana_riqueza70$resultado, mañana_riqueza70$COLE_NATURALEZA),2) ,3);t
+df <- data.frame(naturaleza=c(rep('N',nrow(t)),rep('O',nrow(t))), 
+                 proporcion=c(t[,1],t[,2]), 
+                 puesto=c(rownames(t),rownames(t))) ; df
+
+ggplot(data=df, aes(x=puesto, y=proporcion, group=naturaleza, color=naturaleza)) +
+  geom_line() + geom_point()+
+  scale_color_brewer(palette="Dark2")+
+  theme_minimal()+
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))+
+  labs(title = 'Proporción de estudiantes por puesto segun la naturaleza \n del colegio en el indice económico 70')
+```
+
+#completa
+```{r}
+ftable(jornada_completa$COLE_NATURALEZA, jornada_completa$resultado, jornada_completa$ind_colegio)
+
+d <- datos2 %>%  filter(ind_colegio %in% c(10,20),COLE_INST_JORNADA == 'COMPLETA U ORDINARIA') %>% group_by(COLE_NATURALEZA,ind_colegio) %>% count() %>% arrange(desc(n))
+d['prop'] <- round(d$n/sum(d$n),3)
+d$ind_colegio <- as.character(d$ind_colegio)
+
+ggplot(data =d, aes(x=COLE_NATURALEZA, y=n, fill=ind_colegio) )+
+  geom_bar(stat = 'identity', position = 'dodge')+
+  theme_minimal()+
+  geom_text(aes(label=n), vjust=1.6, color="white", size=3.5, position = position_dodge(width = 1))+
+  geom_text(aes(label=prop), vjust=-0.30, color="black", size=3.5, position = position_dodge(width = 1))+
+  labs(title = 'Cantida de estudiantes en instituciones \n oficales(O) y privadas(N) segun  indice en el Valle de Aburra', y='', x='Tipo')
+
+
+
+
+completa_riqueza10 <- jornada_completa %>% filter(ind_colegio==10)
+round(prop.table(table(completa_riqueza10$COLE_NATURALEZA,completa_riqueza10$resultado),1),3)
+GSK.homogenidad(table(completa_riqueza10$COLE_NATURALEZA, completa_riqueza10$resultado),2)
+
+#---------------------------------grafico de lineas---------------------------------------------
+t <- round(prop.table(table(completa_riqueza10$resultado, completa_riqueza10$COLE_NATURALEZA),2) ,3);t
+df <- data.frame(naturaleza=c(rep('N',nrow(t)),rep('O',nrow(t))), 
+                 proporcion=c(t[,1],t[,2]), 
+                 puesto=c(rownames(t),rownames(t))) ; df
+
+ggplot(data=df, aes(x=puesto, y=proporcion, group=naturaleza, color=naturaleza)) +
+  geom_line() + geom_point()+
+  scale_color_brewer(palette="Dark2")+
+  theme_minimal()+
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))+
+  labs(title = 'Proporción de estudiantes por puesto segun la naturaleza \n del colegio en el indice económico 10')
+
+completa_riqueza20 <- jornada_completa %>% filter(ind_colegio==20)
+round(prop.table(table(completa_riqueza20$COLE_NATURALEZA,completa_riqueza20$resultado),1),3)
+GSK.homogenidad(table(completa_riqueza20$COLE_NATURALEZA,completa_riqueza20$resultado),2)
+
+#---------------------------------grafico de lineas---------------------------------------------
+t <- round(prop.table(table(completa_riqueza20$resultado, completa_riqueza20$COLE_NATURALEZA),2) ,3);t
+df <- data.frame(naturaleza=c(rep('N',nrow(t)),rep('O',nrow(t))), 
+                 proporcion=c(t[,1],t[,2]), 
+                 puesto=c(rownames(t),rownames(t))) ; df
+
+ggplot(data=df, aes(x=puesto, y=proporcion, group=naturaleza, color=naturaleza)) +
+  geom_line() + geom_point()+
+  scale_color_brewer(palette="Dark2")+
+  theme_minimal()+
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))+
+  labs(title = 'Proporción de estudiantes por puesto segun la naturaleza \n del colegio en el indice económico 20')
+```
+
+# sabatina
+```{r}
+ftable(jornada_sabatina$COLE_NATURALEZA, jornada_sabatina$resultado, jornada_sabatina$ind_colegio)
+
+d <- datos2 %>%  filter(ind_colegio %in% c(10,20,30),COLE_INST_JORNADA == 'SABATINA - DOMINICAL') %>% group_by(COLE_NATURALEZA,ind_colegio) %>% count() %>% arrange(desc(n))
+d['prop'] <- round(d$n/sum(d$n),3)
+
+d$ind_colegio <- as.character(d$ind_colegio)
+ggplot(data =d, aes(x=COLE_NATURALEZA, y=n, fill=ind_colegio) )+
+  geom_bar(stat = 'identity', position = 'dodge')+
+  theme_minimal()+
+  geom_text(aes(label=n), vjust=1.6, color="white", size=3.5, position = position_dodge(width = 1))+
+  geom_text(aes(label=prop), vjust=-0.30, color="black", size=3.5, position = position_dodge(width = 1))+
+  labs(title = 'Cantida de estudiantes en instituciones \n oficales(O) y privadas(N) segun  indice en el Valle de Aburra', y='', x='Tipo')
+
+
+sabatina_riqueza10 <- jornada_sabatina %>% filter(ind_colegio==10)
+round(prop.table(table(sabatina_riqueza10$COLE_NATURALEZA,sabatina_riqueza10$resultado),1),3)
+GSK.homogenidad(table(sabatina_riqueza10$COLE_NATURALEZA, sabatina_riqueza10$resultado),2)
+
+#---------------------------------grafico de lineas---------------------------------------------
+t <- round(prop.table(table(sabatina_riqueza10$resultado, sabatina_riqueza10$COLE_NATURALEZA),2) ,3);t
+df <- data.frame(naturaleza=c(rep('N',nrow(t)),rep('O',nrow(t))), 
+                 proporcion=c(t[,1],t[,2]), 
+                 puesto=c(rownames(t),rownames(t))) ; df
+
+ggplot(data=df, aes(x=puesto, y=proporcion, group=naturaleza, color=naturaleza)) +
+  geom_line() + geom_point()+
+  scale_color_brewer(palette="Dark2")+
+  theme_minimal()+
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))+
+  labs(title = 'Proporción de estudiantes por puesto segun la naturaleza \n del colegio en el indice económico 10')
+
+sabatina_riqueza20 <- jornada_sabatina %>% filter(ind_colegio==20)
+round(prop.table(table(sabatina_riqueza20$COLE_NATURALEZA,sabatina_riqueza20$resultado),1),3)
+GSK.homogenidad(table(sabatina_riqueza20$COLE_NATURALEZA, sabatina_riqueza20$resultado),2)
+
+#---------------------------------grafico de lineas---------------------------------------------
+t <- round(prop.table(table(sabatina_riqueza20$resultado, sabatina_riqueza20$COLE_NATURALEZA),2) ,3);t
+df <- data.frame(naturaleza=c(rep('N',nrow(t)),rep('O',nrow(t))), 
+                 proporcion=c(t[,1],t[,2]), 
+                 puesto=c(rownames(t),rownames(t))) ; df
+
+ggplot(data=df, aes(x=puesto, y=proporcion, group=naturaleza, color=naturaleza)) +
+  geom_line() + geom_point()+
+  scale_color_brewer(palette="Dark2")+
+  theme_minimal()+
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))+
+  labs(title = 'Proporción de estudiantes por puesto segun la naturaleza \n del colegio en el indice económico 20')
+
+sabatina_riqueza30 <- jornada_sabatina %>% filter(ind_colegio==30)
+round(prop.table(table(sabatina_riqueza30$COLE_NATURALEZA,sabatina_riqueza30$resultado),1),3)
+GSK.homogenidad(table(sabatina_riqueza30$COLE_NATURALEZA, sabatina_riqueza30$resultado),2)
+
+#---------------------------------grafico de lineas---------------------------------------------
+t <- round(prop.table(table(sabatina_riqueza30$resultado, sabatina_riqueza30$COLE_NATURALEZA),2) ,3);t
+df <- data.frame(naturaleza=c(rep('N',nrow(t)),rep('O',nrow(t))), 
+                 proporcion=c(t[,1],t[,2]), 
+                 puesto=c(rownames(t),rownames(t))) ; df
+
+ggplot(data=df, aes(x=puesto, y=proporcion, group=naturaleza, color=naturaleza)) +
+  geom_line() + geom_point()+
+  scale_color_brewer(palette="Dark2")+
+  theme_minimal()+
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))+
+  labs(title = 'Proporción de estudiantes por puesto segun la naturaleza \n del colegio en el indice económico 30')
+```
+
+
+# nocturna
+```{r}
+jornada_noche
+ftable(jornada_noche$COLE_NATURALEZA, jornada_noche$resultado, jornada_noche$ind_colegio)
+
+d <- datos2 %>%  filter(ind_colegio %in% c(10,20), COLE_INST_JORNADA == 'NOCHE') %>% group_by(COLE_NATURALEZA,ind_colegio) %>% count() %>% arrange(desc(n))
+d['prop'] <- round(d$n/sum(d$n),3)
+
+d$ind_colegio <- as.character(d$ind_colegio)
+ggplot(data =d, aes(x=COLE_NATURALEZA, y=n, fill=ind_colegio) )+
+  geom_bar(stat = 'identity', position = 'dodge')+
+  theme_minimal()+
+  geom_text(aes(label=n), vjust=1.6, color="white", size=3.5, position = position_dodge(width = 1))+
+  geom_text(aes(label=prop), vjust=-0.30, color="black", size=3.5, position = position_dodge(width = 1))+
+  labs(title = 'Cantida de estudiantes en instituciones \n oficales(O) y privadas(N) segun  indice en el Valle de Aburra', y='', x='Tipo')
+
+
+
+noche_riqueza10 <- jornada_noche %>% filter(ind_colegio==10)
+round(prop.table(table(noche_riqueza10$COLE_NATURALEZA,noche_riqueza10$resultado),1),3)
+GSK.homogenidad(table(noche_riqueza10$COLE_NATURALEZA, noche_riqueza10$resultado),2)
+
+#---------------------------------grafico de lineas---------------------------------------------
+t <- round(prop.table(table(noche_riqueza10$resultado, noche_riqueza10$COLE_NATURALEZA),2) ,3);t
+df <- data.frame(naturaleza=c(rep('N',nrow(t)),rep('O',nrow(t))), 
+                 proporcion=c(t[,1],t[,2]), 
+                 puesto=c(rownames(t),rownames(t))) ; df
+
+ggplot(data=df, aes(x=puesto, y=proporcion, group=naturaleza, color=naturaleza)) +
+  geom_line() + geom_point()+
+  scale_color_brewer(palette="Dark2")+
+  theme_minimal()+
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))+
+  labs(title = 'Proporción de estudiantes por puesto segun la naturaleza \n del colegio en el indice económico 10')
+
+noche_riqueza20 <- jornada_noche %>% filter(ind_colegio==20)
+round(prop.table(table(noche_riqueza20$COLE_NATURALEZA,noche_riqueza20$resultado),1),3)
+GSK.homogenidad(table(noche_riqueza20$COLE_NATURALEZA, noche_riqueza20$resultado),2)
+
+#---------------------------------grafico de lineas---------------------------------------------
+t <- round(prop.table(table(noche_riqueza20$resultado, noche_riqueza20$COLE_NATURALEZA),2) ,3);t
+df <- data.frame(naturaleza=c(rep('N',nrow(t)),rep('O',nrow(t))), 
+                 proporcion=c(t[,1],t[,2]), 
+                 puesto=c(rownames(t),rownames(t))) ; df
+
+ggplot(data=df, aes(x=puesto, y=proporcion, group=naturaleza, color=naturaleza)) +
+  geom_line() + geom_point()+
+  scale_color_brewer(palette="Dark2")+
+  theme_minimal()+
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))+
+  labs(title = 'Proporción de estudiantes por puesto segun la naturaleza \n del colegio en el indice económico 20')
+  
+```
+
+# ahora de recordar todas las tecnicas enseñadas en clases que me permitan hacer comparaciones entre publico y privados bajos los filtros especificados
+
+* Prueba de homogeneidad v ́ıa GSK diap 13 pag 12 y codigo en pag 13 GSK.homogenidad<-function(N,Nro.Estratos){
+
+* Programa para Homogeneidad Marginal diap 14 codigo pag 15 GSK.homogenidad.marginal<-function(N){
+
+* Prueba de Simetr ́ıa con GSKdiap 14 pag 24 GSK.simetria<-function(N
+
+* Programa para GSK diap 16 pg-19 GSK<-function(N,Nro.Estratos,A, logaritmo=F, X=NULL)
+
+
+# Un intento para definir a los mejores colegios:
+
+```{r}
+# datos para comparar los resultados obtenidos con datos2
+datos3 <- datos %>%  filter(ESTU_RESIDE_DEPT == 'ANTIOQUIA')     %>% select(COLE_INST_NOMBRE, ind_colegio, resultado,
+         ESTU_RESIDE_MCPIO,COLE_NATURALEZA, COLE_CARACTER_COLEGIO, COLE_INST_VLR_PENSION,
+          COLE_INST_JORNADA) #count(ESTU_RESIDE_MCPIO)
+datos3$COLE_INST_NOMBRE <-  trimws(datos3$COLE_INST_NOMBRE) # es necesrio eliminarlos espacios en blanco
+
+```
+
+```{r}
+datos2$COLE_INST_NOMBRE <-  trimws(datos2$COLE_INST_NOMBRE) # es necesrio eliminarlos espacios en blanco
+
+# selecciono los colegios que tengan al menos 1 estudiante en los mejores 100.
+d <- datos2 %>% group_by(COLE_INST_NOMBRE)  %>%  filter(any(resultado == '(0,100]'))# %>% arrange(desc(COLE_INST_NOMBRE)); d
+
+# este método no muestra a qué COLEGIO pertenece cada resultado de la tabla por ello es borrado :( pero seguro hay solución.
+resultados <- droplevels(d) %>% select(resultado) %>% group_map(~ prop.table(table(.x$resultado)))
+head(resultados)
+rm(resultados)
+
+# este es el procedimiento ideal
+resultados <- d %>%
+  select(resultado) %>% 
+  split(.$COLE_INST_NOMBRE) %>%
+  map(~ prop.table(table(.x))) #%>%
+head(resultados)
+
+# extraigo la proporción de los 100 primeros puestos por colegio:
+resultados2 <- sapply(resultados,"[[",1) %>% sort(decreasing = T)
+head(resultados2, 11)
+
+# Verifico que los 10 mejores colegios si sean del Valle de Aburra:
+nombre <- "COL SAN IGNACIO DE LOYOLA"
+d %>% filter(COLE_INST_NOMBRE== nombre) %>% select(resultado) %>% table# %>% prop.table()
+datos2 %>% filter(COLE_INST_NOMBRE== nombre) %>% select(resultado) %>% table# %>% prop.table()
+datos3 %>% filter(COLE_INST_NOMBRE== nombre) %>% select(resultado) %>% table #%>% prop.table()
+
+#  head(resultados2, 11)
+#         COLEGIO CAMPESTRE HORIZONTES         INST MUSICAL DIEGO ECHAVARRIA                        COL MONTESSORI 
+#                            1.0000000                             1.0000000                             0.9841270 
+#          COL DE LA COMPANIA DE MARIA COLEGIO ASPAEN GIMNASIO LOS ALCAZARES             COL SAN IGNACIO DE LOYOLA 
+#                            0.9594595                             0.9318182                             0.9298246 
+#              COLEGIO THEODORO HERTZL                       COL CORAZONISTA      COMUNIDAD COLEGIO DE JESUS MARIA 
+#                            0.8750000                             0.8493151                             0.8358209 
+#                           COL FONTAN                        COLEGIO ALEMAN 
+#                            0.8333333                             0.8333333 
+
+      
+head(names(resultados2),11)[-1] # elimino COLEGIO CAMPESTRE HORIZONTES que es de Rionegro
+```
+```{r}
+ggplot(data = datos2) +
+  geom_count(mapping = aes(x = resultado, y = ind_colegio))
+```
+
+```{r}
+# los nombres de las instituciones pero sin filtrar por ninguna varaible:
+nombres0 <- head(names(resultados2),11)[-1] 
+# extraemos para cada colegio si es O ó N:
+COLE_NATURALEZA <- c()
+for (j in nombres0) {
+    naturaleza <- datos2 %>% filter(COLE_INST_NOMBRE==j) %>% .[1,'COLE_NATURALEZA']
+    COLE_NATURALEZA <- c(COLE_NATURALEZA, paste(naturaleza))
+}
+head((resultados2),11)[-1]
+df <- data.frame('Porcentaje de mejores'=head((resultados2),11)[-1], 
+                 'Naturaleza del colegio'=COLE_NATURALEZA)
+
+library('xtable')
+(xtable(df, caption ='Mejores Colegios', align = as.character("|r|r|l|")))
+```
+
+
+# Ahora se seleccionarán los mejores colegios basados en el criterio de jornada e indice económico
+```{r}
+# selecciono los colegios que tengan al menos 1 estudiante en los mejores 100.
+d <- datos2 %>% group_by(COLE_INST_NOMBRE)  %>%  filter(any(resultado == '(0,100]'))# %>% arrange(desc(COLE_INST_NOMBRE)); d
+
+#lAS CONVINACIONES ESTARÁN ENTRE:
+apply(d[,c("ind_colegio","COLE_INST_JORNADA")],2,unique)
+```
+# Mejores colegios basados en más criterios:
+
+```{r}
+# utilizamos 2 bucles para realizar todas las convinaciones posibles:
+nombres <- c()
+l <- list()
+for (i in c(10,20,30,40,70,80,100)) {
+  for (j in c("TARDE", "MAÃ‘ANA", "COMPLETA U ORDINARIA", "SABATINA - DOMINICAL" ,"NOCHE")) {
+   nombres <- c(nombres,paste('Indice: ', i,', Jornada: ',j))
+   d <- datos2 %>% group_by(COLE_INST_NOMBRE)  %>%  filter(any(resultado == '(0,100]'))# %>% arrange(desc(COLE_INST_NOMBRE));
+   d <- d %>% filter(ind_colegio == i & COLE_INST_JORNADA == j)# %>% arrange(desc(COLE_INST_NOMBRE)); d
+   # este es el procedimiento ideal
+  resultados <- d %>%
+    select(resultado) %>% 
+    split(.$COLE_INST_NOMBRE) %>%
+    map(~ prop.table(table(.x))) 
+  # extraigo la proporción de los 100 primeros puestos por colegio:
+  resultados2 <- sapply(resultados,"[[",1) %>% sort(decreasing = T)
+  l <- append(l, list(head(resultados2, 10)))
+  }
+  
+}
+l
+
+# nombramos cada resultados de la lista:
+names(l) <- nombres[-18] # la posicion 18 no existe: "40 COMPLETA U ORDINARIA"
+
+# extraemos para cada colegio si es O ó N:
+l2 <- list()
+for (i in 1:17) {
+  nombres2 <- names(l[[i]])
+  COLE_NATURALEZA <- c()
+  for (j in nombres2) {
+    naturaleza <- datos2 %>% filter(COLE_INST_NOMBRE==j) %>% .[1,'COLE_NATURALEZA']
+    COLE_NATURALEZA <- c(COLE_NATURALEZA, paste(naturaleza))
+  }
+  l2 <- append(l2,list(COLE_NATURALEZA))
+}
+l2
+
+
+# Pasamos los resultados a latex 
+for (i in 1:17){
+  df <- data.frame('Porcentaje de mejores'=l[[i]], 'Naturaleza del colegio'=l2[[i]])
+  print(xtable(df, caption =nombres[i], align = as.character("|r|r|l|")))
+}
+```
+
