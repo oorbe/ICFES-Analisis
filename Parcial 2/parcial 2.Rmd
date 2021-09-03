@@ -1,0 +1,538 @@
+---
+title: "modelos logisticos "
+author: "Oliver Rodriguez"
+date: "16/8/2021"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+```{r}
+library(tidyverse)
+library(xtable)
+setwd('C:/Users/Oliver/Documents/9/IA dato categoricos ') 
+load(file = "baseICFEStrabajo.Rdata") # cargo datos formato R
+# names(datos) # obsevo los datos en busqueda de variables socio-economicas
+```
+
+
+
+```{r}
+# esta funcion extrae el indice, tomando las columans que me interesan leug.
+f1 <- function(x){# dentr el df
+  
+  datos2 <- (subset(x, select = c('ESTU_ESTRATO','FAMI_NIVEL_SISBEN','ECON_MATERIAL_PISOS',
+                               'FAMI_ING_FMILIAR_MENSUAL','ECON_SN_SERVICIO_TV','ECON_SN_NEVERA'
+                               ,'ECON_SN_LAVADORA','ECON_SN_CELULAR', 'ECON_SN_INTERNET','ECON_SN_AUTOMOVIL')))
+  datos2[is.na(datos2)] <- 0 # todos los NA´s a 0
+      #' Se cambiaran los numeros como se especifican anteriormente:
+  datos2$ECON_SN_SERVICIO_TV <- ifelse(datos2$ECON_SN_SERVICIO_TV == 1, 2, 0)
+  datos2$ECON_SN_CELULAR <- ifelse(datos2$ECON_SN_CELULAR == 1, 2, 0)
+  datos2$ECON_SN_LAVADORA <- ifelse(datos2$ECON_SN_LAVADORA == 1, 5, 0)
+  datos2$ECON_SN_INTERNET <- ifelse(datos2$ECON_SN_INTERNET == 1, 6, 0)
+  datos2$ECON_SN_AUTOMOVIL <- ifelse(datos2$ECON_SN_AUTOMOVIL == 1, 8, 0)
+  indice0 <- apply(datos2, 1, sum) # aplico suma por filas
+  indice <- indice0*100/max(indice0) # multiplico el indice por 100 y los divido por el maximo de los indice -> queda en terminos                                         porcentules
+  
+  x$indice <- indice # lao añado al df ingresado
+  return(x) # retorno el df de ingreso y lo retorno con el índice
+}
+
+datos <- f1(datos)
+```
+
+```{r}
+# Así clasifico a los colegios: los agrupo por colegio, luego sumo el indice de riqueza de los estudiantes anteriormente creado:
+datos_agrupados <- datos %>% 
+  group_by(COLE_INST_NOMBRE) %>% 
+  summarise(suma_ind_colegio=sum(indice))
+
+
+# modifico datos realizando un full_join  con los datos_agrupados para  la BD en las condiciones iniciales pero con la nueva variable:  
+datos <- datos %>% 
+  full_join(datos_agrupados, by =c('COLE_INST_NOMBRE'='COLE_INST_NOMBRE'))
+
+# el nuevo indice que indica lo costoso que puede ser el colegio
+datos$suma_ind_colegio <- datos$suma_ind_colegio*100/max(datos$suma_ind_colegio)
+#datos$suma_ind_colegio2 <- #datos$suma_ind_colegio2*100/max(datos$suma_ind_colegio2[-which(is.na(datos$suma_ind_colegio2))])
+
+datos <- datos %>% relocate(COLE_INST_NOMBRE,suma_ind_colegio,suma_ind_colegio) # reubico las columans de interes
+
+
+#  se crean los percentiles para ind_colegio.
+datos<- datos %>%
+  mutate(ind_colegio= case_when(
+     datos$suma_ind_colegio <=10 ~ 10
+    ,datos$suma_ind_colegio >10 & datos$suma_ind_colegio <=20 ~ 20
+    ,datos$suma_ind_colegio >20 & datos$suma_ind_colegio <=30 ~ 30
+    ,datos$suma_ind_colegio >30 & datos$suma_ind_colegio <=40 ~ 40
+    ,datos$suma_ind_colegio >40 & datos$suma_ind_colegio <=50 ~ 50
+    ,datos$suma_ind_colegio >50 & datos$suma_ind_colegio <=60 ~ 60
+    ,datos$suma_ind_colegio >60 & datos$suma_ind_colegio <=70 ~ 70
+    ,datos$suma_ind_colegio >70 & datos$suma_ind_colegio <=80 ~ 80
+    ,datos$suma_ind_colegio >80 & datos$suma_ind_colegio <=90 ~ 90
+    ,datos$suma_ind_colegio >90 ~ 100
+  ))
+
+# reubico las columnas de interes para visualizar 
+datos <- datos %>% relocate(COLE_INST_NOMBRE,ind_colegio,suma_ind_colegio,indice) # reubico las columans de interes
+
+rm(datos_agrupados)
+```
+
+Indice, para todas las posibles discapacidades simplificada de forma dicotoma
+```{r}
+
+
+
+f2 <- function(dataa){
+  dataa %>% select(ESTU_DISC_SORDOCEGUERA ,ESTU_DISC_COGNITIVA, ESTU_DISC_INVIDENTE,
+              ESTU_DISC_MOTRIZ,ESTU_DISC_SORDOINTERPRETE, ESTU_DISC_SORDONOINTERPRETE) %>% apply(., 2, function(x){
+                as.numeric(factor(x))
+              }) %>% apply(., 1, sum) -> d 
+
+  d1 <- ifelse(d == 6, 0, 1) 
+  dataa %>% select(-c(ESTU_DISC_SORDOCEGUERA ,ESTU_DISC_COGNITIVA, ESTU_DISC_INVIDENTE,
+              ESTU_DISC_MOTRIZ,ESTU_DISC_SORDOINTERPRETE, ESTU_DISC_SORDONOINTERPRETE)) -> dataa
+  dataa$indice_discapacidad <- d1
+  return(dataa)
+}
+
+d1 <- f2(dataa = datos)
+str(d1)
+```
+
+# Selecionanado las variables de interes:
+```{r}
+
+# elimino varaibles que no interesan:
+d1 <- d1 %>% select(-c(ESTU_CONSECUTIVO, ESTU_PAIS_RESIDE, ESTU_NACIMIENTO_DIA, ESTU_NACIMIENTO_MES, ESTU_NACIMIENTO_ANNO, ESTU_DISC_BAJAVISION, ESTU_ETNIA, ESTU_CODIGO_RESIDE_MCPIO, ESTU_ZONA_RESIDE, ECON_AREA_VIVE, COLE_CODIGO_COLEGIO, CODIGO_DANE, ESTU_VECES_ESTDO, ESTU_EXAM_COD_MPIOPRESENTACION, ESTU_EXAM_NOMBREEXAMEN, ECON_CUARTOS, FAMI_NIVEL_SISBEN, ECON_MATERIAL_PISOS, ECON_PERSONAS_HOGAR, ECON_SN_TELEFONIA, ECON_SN_CELULAR, ECON_SN_INTERNET, ECON_SN_SERVICIO_TV, ECON_SN_COMPUTADOR, ECON_SN_LAVADORA, ECON_SN_NEVERA, ECON_SN_HORNO, ECON_SN_DVD, ECON_SN_MICROHONDAS, ECON_SN_AUTOMOVIL, FAMI_ING_FMILIAR_MENSUAL, PERIODO, COLE_INST_NOMBRE,
+ESTU_RESIDE_MCPIO, ESTU_EXAM_MPIO_PRESENTACION, ESTU_EXAM_MPIO_PRESENTACION,
+LENGUAJE_PUNT, MATEMATICAS_PUNT, CIENCIAS_SOCIALES_PUNT, FILOSOFIA_PUNT, BIOLOGIA_PUNT, QUIMICA_PUNT, FISICA_PUNT, INGLES_PUNT, INGLES_DESEM, COMP_FLEX_NOMBRE, COMP_FLEX_PUNT, COMP_FLEX_DESEM, indice, suma_ind_colegio, ESTU_EXAM_DEPT_PRESENTACION))
+
+
+
+# s %>% str
+
+d1 %>%
+    mutate(
+        across(-c( ESTU_PUESTO, ESTU_HORAS_TRABAJO, ESTU_EDAD), factor)
+    ) -> d1
+
+# rm(X_train, X_test, s, d_)
+str(d1)
+```
+
+
+
+Imputación de datos faltantes:
+```{r}
+apply(d1, 2, function(x) is.na(x) %>% sum) %>% .[.>0] -> variables_NAs
+variables_NAs
+```
+ESTU_EDAD: Elimino o pongo el promedio.
+COLE_ES_BILINGUE: se pondran en 0 = no bilingue.
+COLE_INST_VLR_PENSION: ELimino.
+FAMI_COD_EDUCA_PADRE: Elimino.
+FAMI_COD_EDUCA_MADRE: Elimino.
+FAMI_COD_OCUP_PADRE: Elimino.   
+FAMI_COD_OCUP_MADRE: ELimino.
+ESTU_ESTRATO: Elimino.
+ESTU_TRABAJA: Elimino.
+ESTU_HORAS_TRABAJO: NA´s = 0 i.e. no trabajan. 
+
+```{r}
+# posiciones de  las NAs en cada variable.
+# which_is_na <- lapply(d1[,names(variables_NAs)] , function(x) which(is.na(x)))
+
+# Aplico el cambio a estas dos variables para no realizar un drop drop_na que elimine todas estas observaciones:
+d1$COLE_ES_BILINGUE[which(is.na(d1$COLE_ES_BILINGUE))] <- 0 
+d1$ESTU_HORAS_TRABAJO[which(is.na(d1$ESTU_HORAS_TRABAJO))] <- 0 
+
+# se eliminan  aproximadamente 145 observaciones
+Data <- drop_na(d1)
+# Verifico que no hay NAs:
+# apply(Data, 2, function(x) is.na(x) %>% sum) %>% .[.>0]
+rm(d1, datos)
+# str(d1)
+# str(Data)
+```
+
+
+# observando más caracteríticas de los datos
+```{r}
+apply(Data, 2, function(x){
+    return(unique(x) )
+  } 
+)
+
+# de la edad se observan observaciones atipicas e irreales. Tambien en COLE_CARACTER_COLEGIO hay espacios en blanco.
+
+
+apply(Data, 2, function(x){
+    return(x[x==""] %>% length() )
+  } 
+)
+# existen 34 espacios en blanco en COLE_CARACTER_COLEGIO.
+
+
+sapply(names(Data), function(x) {
+  if(is.factor(Data[,x])) levels(Data[,x])
+  else print('no')# Data_model[,x] %>% class
+  }
+)
+
+# Se eliminan las 34 espacios en blanco en COLE_CARACTER_COLEGIO.
+Data <- Data %>% dplyr::filter(COLE_CARACTER_COLEGIO != '')
+
+str(Data)
+
+```
+
+
+```{r}
+# Fenomenos extraños con respecto a la edad.
+ggplot(data = Data, mapping = aes(x = ESTU_EDAD))+
+  geom_histogram(binwidth = 10 ,col = 'red', fill = 'blue', alpha = 0.2)+
+  labs(x = 'Edades', y = 'Conteo', title = 'Distribución de las edades')+
+  theme_light()
+  
+
+# Data$ESTU_EDAD[Data$ESTU_EDAD<=18] %>% length()
+# Data$ESTU_EDAD[Data$ESTU_EDAD<=13] %>% unique()
+# Data$ESTU_EDAD[Data$ESTU_EDAD<=18] %>% summary()
+# 
+# 
+# sapply(c(18, seq(20, 100, by=10)), simplify = F, function(x){
+#     c(x, Data$ESTU_EDAD[Data$ESTU_EDAD>x] %>% length())
+#   }
+# )
+# 
+# 
+# sapply(c(seq(18, 13)), simplify = F, function(x){
+#     c(x, Data$ESTU_EDAD[Data$ESTU_EDAD<=x] %>% length())
+#   }
+# )
+
+
+```
+
+
+Se observan valores irrazonables para la edad minimos de 6 años y mayores de 100 años. Para los estudiante que tienen edades menores o iguales a 18, son la mayoria de los estudiantes. Para el caso de estudiantes con más menos de 14 años se tienen 2221 y mayores de 100 años se tienen 5296 estudiantes. Se opta por la opción de realiar el studio solo a estudiantes menores o iguales a 18 años, esto es 475022 estudiantes, dado que segun el siguiente link, la mayoria de lo estudiantes se espera que se graduen a los 16 años, pero lo consideraremos hasta los 18 dado que algunos puden tener algún retraso. Para el caso de los que tienen edades menores o iguales a 14 años se le asignará la mediana que es de 17 años, estos es a 252 estudiantes.
+
+
+https://www.mineducacion.gov.co/1621/article-183908.html#:~:text=A%20los%20cinco%20a%C3%B1os%20inicia%20sus%20estudios%20en,mayor%C3%ADa%20de%20los%20casos%20reci%C3%A9n%20cumplidos%20los%2016
+
+
+
+```{r}
+# Data_model$ESTU_EDAD %>% mean # Dado tanto valores atípicos, no es una buena opción hallar la media para este caso, mejor la                                   mediana:
+Data$ESTU_EDAD %>% median
+
+menores_14_años <- which(Data$ESTU_EDAD<=14)
+Data$ESTU_EDAD[menores_14_años] <- 17
+
+str(Data)
+Data <- Data %>% filter(ESTU_EDAD<=18)
+
+ggplot(data = Data, mapping = aes(x = ESTU_EDAD))+
+  geom_histogram(binwidth = 1 ,col = 'Blue', fill = 'blue', alpha = 0.5)+
+  labs(x = 'Edades', y = 'Conteo', title = 'Distribución de las edades de los estudiantes en edad academica normal')+
+  theme_light()
+
+Data$ESTU_EDAD <- factor(Data$ESTU_EDAD)
+str(Data)
+```
+
+
+# Datos de validacioy prueba:
+```{r}
+set.seed(16082)
+index <- sample(x = nrow(Data), size = round(nrow(Data)*0.9) , replace = F) 
+# X_train <- datos[index,]
+# X_test <- datos[-index,]
+
+str(Data)
+```
+
+
+
+```{r}
+Data %>%
+    mutate(
+        across(-c( ESTU_PUESTO, ESTU_HORAS_TRABAJO), factor)
+    ) -> Data
+
+str(Data)
+```
+
+# Modelos logisticos:
+
+Primer modelo con dos variables respuesta. Para este caso se considerarán los resultados en el percentil 50 ó mediana y las variables observadas en la salida anterior: 
+
+```{r}
+Data_model <- Data %>% mutate(
+  resultado = cut(ESTU_PUESTO,breaks = c(0,500, 1000), include.lowest = T)
+                              ) %>%  select(-ESTU_PUESTO)
+ #str(Data_model)
+# mod1 <- glm(resultado ~ ., data = Data_model[index,], family = binomial) 
+# saveRDS(mod1, "mod1.rds")
+mod1 <- readRDS("mod1.rds")
+mod1 %>% summary
+data.frame(summary(mod1)$coefficients) %>% xtable()
+
+
+
+# The type = "response" option tells R to output probabilities of the form P(Y = 1|X), and the 1 here is (500,1e+03]           
+contrasts(Data_model$resultado)
+pred <- predict(mod1, newdata = Data_model[-index,], type = 'response')
+
+# Error in model.frame.default(Terms, newdata, na.action = na.action, xlev = object$xlevels) : 
+  # factor FAMI_COD_OCUP_PADRE has new levels 13
+
+glm.pred <- rep('[0,500]', (nrow(Data_model)-length(index)) )
+glm.pred[pred > 0.5] <- '(500,1e+03]'
+
+
+table(glm.pred,  Data_model[-index,'resultado']) %>% xtable
+mean(glm.pred == Data_model[-index,'resultado'])
+mean(glm.pred != Data_model[-index,'resultado'])
+
+```
+
+
+```{r}
+Data$ESTU_EDAD %>% summary
+Data$ESTU_PUESTO %>% summary
+```
+
+
+
+
+```{r}
+f1 <- function(x) {
+  return(
+    list(
+  ggplot( Data_model, aes(x = COLE_INST_VLR_PENSION,  fill = resultado)) +
+  geom_bar(position = position_dodge2(preserve = "single")) +
+  labs(x = 'Tipos de pension', y = 'Conteo', title = 'Pension por resultados')+
+  theme_minimal()
+,
+ggplot( Data_model, aes(x = FAMI_COD_EDUCA_MADRE,  fill = resultado)) +
+  geom_bar(position = position_dodge2(preserve = "single")) +
+  labs(x = 'Niveles de educacion', y = 'Conteo', title = 'Educacion de las madres por resultados')+
+  theme_minimal()
+,
+ggplot( Data_model, aes(x = FAMI_COD_EDUCA_PADRE,  fill = resultado)) +
+  geom_bar(position = position_dodge2(preserve = "single")) +
+  labs(x = 'Niveles de educacion', y = 'Conteo', title = 'Educacion de las padres por resultados')+
+  theme_minimal()
+,
+ggplot( Data_model, aes(x = ESTU_TRABAJA,  fill = resultado)) +
+  geom_bar(position = position_dodge2(preserve = "single")) +
+  labs(x = 'Niveles de horas de trabajo', y = 'Conteo', title = 'Trabja el estudiantes por resultados')+
+  theme_minimal()
+    )
+  )
+}
+
+f1()
+```
+
+
+
+```{r}
+X1_range <- seq(from=min(data$X1), to=max(data$X1), by=.01)
+
+
+ggplot(Data_model, aes(x=ESTU_HORAS_TRABAJO, y= resultado)) + 
+  geom_point(alpha=.5) +
+  stat_smooth(method="glm", se=FALSE, method.args = list(family=binomial))
+```
+
+
+```{r}
+# el 98% de los estudiantes presentan el examen de la prueba en el mimos departamente donde reciden, asi que  un a idea para otros modelosa es que no estaría mal eliminar una de estad dos varaibles.
+table(Data_model$ESTU_RESIDE_DEPT, Data_model$ESTU_EXAM_DEPT_PRESENTACION) %>% diag() %>% sum(.)/nrow(Data_model)
+
+# finalmente borre ESTU_EXAM_DEPT_PRESENTACION
+```
+
+
+
+Segundo modelo con dos variables respuesta. Para este caso se considerarán los resultados en el percentil 25  y las variables observadas en la salida anterior: 
+
+```{r}
+Data_model <- Data %>% mutate(
+  resultado = cut(ESTU_PUESTO,breaks = c(0,250, 1000), include.lowest = T)
+                              ) %>%  select(-ESTU_PUESTO)
+ # str(Data_model)
+# mod2 <- glm(resultado ~ ., data = Data_model[index,], family = binomial) 
+# saveRDS(mod2, "mod2.rds")
+mod2 <- readRDS("mod2.rds")
+mod2 %>% summary
+data.frame(summary(mod2)$coefficients) %>% xtable()
+
+# The type = "response" option tells R to output probabilities of the form P(Y = 1|X), and the 1 here is (500,1e+03]           
+contrasts(Data_model$resultado)
+pred <- predict(mod2, newdata = Data_model[-index,], type = 'response')
+
+# Error in model.frame.default(Terms, newdata, na.action = na.action, xlev = object$xlevels) : 
+  # factor FAMI_COD_OCUP_PADRE has new levels 13
+
+glm.pred <- rep('[0,250]', (nrow(Data_model)-length(index)) )
+glm.pred[pred > 0.5] <- '(250,1e+03]'
+
+
+table(glm.pred,  Data_model[-index,'resultado']) %>% xtable
+mean(glm.pred == Data_model[-index,'resultado'])
+mean(glm.pred != Data_model[-index,'resultado'])
+```
+
+
+```{r}
+f1()
+```
+
+Tercer modelo con dos variables respuesta. Para este caso se considerarán los resultados en el percentil 75 y las variables observadas en la salida anterior: 
+
+```{r}
+Data_model <- Data %>% mutate(
+  resultado = cut(ESTU_PUESTO,breaks = c(0,750, 1000), include.lowest = T)
+                              ) %>%  select(-ESTU_PUESTO)
+ # str(Data_model)
+# mod3 <- glm(resultado ~ ., data = Data_model[index,], family = binomial) 
+# saveRDS(mod3, "mod3.rds")
+mod3 <- readRDS("mod3.rds")
+mod3 %>% summary
+data.frame(summary(mod3)$coefficients) %>% xtable()
+
+# The type = "response" option tells R to output probabilities of the form P(Y = 1|X), and the 1 here is (500,1e+03]           
+contrasts(Data_model$resultado)
+pred <- predict(mod3, newdata = Data_model[-index,], type = 'response')
+
+# Error in model.frame.default(Terms, newdata, na.action = na.action, xlev = object$xlevels) : 
+  # factor FAMI_COD_OCUP_PADRE has new levels 13
+
+glm.pred <- rep('[0,750]', (nrow(Data_model)-length(index)) )
+glm.pred[pred > 0.5] <- '(750,1e+03]'
+
+
+table(glm.pred,  Data_model[-index,'resultado']) %>% xtable
+mean(glm.pred == Data_model[-index,'resultado'])
+mean(glm.pred != Data_model[-index,'resultado'])
+rm(mod1, mod2, mod3, glm.pred, menores_14_años, variables_NAs, pred)
+```
+
+
+```{r}
+f1()
+```
+
+# Modelos logistico multinomiles:
+Multinomial 1
+```{r}
+require(nnet)
+
+Data_model <- Data %>% mutate(
+  resultado = cut(ESTU_PUESTO,breaks = c(0,333.333,666.667, 1000), include.lowest = F)
+                              ) %>%  select(-ESTU_PUESTO)
+str(Data_model)
+
+# Para este modelo el nivel de referencia o el caso base utilizaremos la clase "(0,333]"
+levels(Data_model$resultado)
+contrasts(Data_model$resultado)
+# Data_model$resultado <- relevel(x = Data_model$resultado, ref = "(333,667]")
+
+# mod_multinom1 <- multinom(resultado ~ ., data = Data_model[index,] )
+# saveRDS(mod_multinom1, "mod_multinom1.rds")
+mod_multinom1 <- readRDS("mod_multinom1.rds")
+mod_multinom1$fitted.values %>% head %>%  xtable()
+
+pred <- predict(mod_multinom1, newdata = Data_model[-index,])
+
+table(pred, Data_model$resultado[-index]) %>% xtable()
+mean(pred == Data_model$resultado[-index])
+mean(pred != Data_model$resultado[-index])
+
+data.frame(summary(mod_multinom1)$coefficients) %>% xtable() 
+
+```
+
+
+mitinomial 2
+```{r}
+Data_model <- Data %>% mutate(
+  resultado = cut(ESTU_PUESTO,breaks = c(0, 250, 500, 750, 1000), include.lowest = F)
+                              ) %>%  select(-ESTU_PUESTO)
+str(Data_model)
+
+
+# Para este modelo el nivel de referencia o el caso base utilizaremos la clase "(0,333]"
+levels(Data_model$resultado)
+# Data_model$resultado <- relevel(x = Data_model$resultado, ref = "(333,667]")
+contrasts(Data_model$resultado)
+
+# mod_multinom2 <- multinom(resultado ~ ., data = Data_model[index,] )
+# saveRDS(mod_multinom2, "mod_multinom2.rds")
+mod_multinom2 <- readRDS("mod_multinom2.rds")
+mod_multinom2$fitted.values %>% head %>%  xtable()
+
+pred <- predict(mod_multinom2, newdata = Data_model[-index,], type = 'class')
+
+table(pred, Data_model$resultado[-index]) 
+table(pred, Data_model$resultado[-index]) %>% xtable()
+mean(pred == Data_model$resultado[-index])
+mean(pred != Data_model$resultado[-index])
+
+
+z <- mod_multinom2$fitted.values/mod_multinom2$residuals
+
+```
+
+
+Tabla para latex:
+```{r}
+library(xtable)
+head(Data) 
+head(Data[,1:5]) %>% xtable
+data.frame(Variables = names(Data), tipo = sapply(1:21, function(x){
+  class(Data[,x])
+}) ) %>% xtable
+
+apply(Data, 2, class)
+
+sapply(names(Data), function(x){
+  class(Data$ESTU_PUESTO)
+})
+
+sapply(1:21, function(x){
+  class(Data[,x])
+})
+
+class(Data)
+
+x <- str(Data)
+
+
+```
+
+
+
+```{r}
+index <- sample(x = nrow(Data), size = round(nrow(Data)*0.8) , replace = F) 
+Data_model[index, 'FAMI_COD_OCUP_PADRE'] %>% unique() %>% sort
+Data_model[-index, 'FAMI_COD_OCUP_PADRE'] %>% unique() %>% sort
+Data_model[index,] %>% group_by(FAMI_COD_OCUP_PADRE)%>% count() 
+Data_model[-index,] %>% group_by(FAMI_COD_OCUP_PADRE)%>% count() 
+Data_model[,] %>% group_by(FAMI_COD_OCUP_PADRE)%>% count() %>% arrange()
+
+Data_model[-index,] %>% filter(ESTU_EXAM_DEPT_PRESENTACION == 'VAUPÃ‰S')
+
+Data_model[index, 'FAMI_COD_OCUP_PADRE'] %>% unique() %>% sort
+```
+
+
